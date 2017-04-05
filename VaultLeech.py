@@ -18,6 +18,8 @@ class VaultLeech(object):
         # TODO: verify args
         print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
 
+        self.buildPathToVideo()
+
     def loginToVault(self):
         r = requests.get(self.loginurl, auth=(self.login, self.password))
         self.checkURLResponse(r)
@@ -152,4 +154,3 @@ class VaultLeech(object):
                     sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )    
                     sys.stdout.flush()
             print '\n'
-
