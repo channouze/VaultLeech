@@ -109,12 +109,8 @@ class VaultLeech(object):
     def showDetails(self, xml, filelist):
         tree = etree.parse(xml)
         print '='*50
-        year = xml[xml.find('sf')+2:xml.find('sf')+4]
-        if (int(year)+1000 > 1096):
-            stryear = 1900+int(year)
-        else:
-            stryear = 2000+int(year)
-        print 'GDC', stryear
+
+        print 'GDC', self.getYear(xml)
         for title in tree.xpath('/podiumPresentation/metadata/title'):
             print title.text
 
@@ -138,9 +134,19 @@ class VaultLeech(object):
         # TODO: Check input from user
         
         # Finally, Get video
-        self.getVideo(filelist[0], stryear, title.text)
+        self.getVideo(filelist[0], self.getYear(xml), title.text)
 
         return None
+
+    # return the year of the event from the video url
+    def getYear(self, string):
+
+        year = string[string.find('sf')+2:string.find('sf')+4]
+        if (int(year)+1000 > 1096):
+            stryear = 1900+int(year)
+        else:
+            stryear = 2000+int(year)
+        return int(stryear)
 
     def checkURLResponse(self, req):
         if (req.status_code != 200):
