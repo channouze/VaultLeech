@@ -25,10 +25,10 @@ class VaultLeech(object):
         self.checkURLResponse(r)
 
     def validateEmail(self):
-        print 'todo'
+        pass
 
     def validateTalkURL(self):
-        print 'todo'
+        pass
 
     def buildPathToVideo(self):
         r = requests.get(self.talkurl)
@@ -70,8 +70,31 @@ class VaultLeech(object):
         for mp4 in tree.xpath('/podiumPresentation/metadata/MBRVideos/MBRVideo/streamName'):
             mp4list.append(mp4.text)
         
-        # TODO: build host from js file in player.html
-        host = 'http://s3-2u-d.digitallyspeaking.com'
+        # build host from js file in player.html
+        # TODO: make it work with pre 2015 videos
+        r = requests.get(xmlURL)
+        self.checkURLResponse(r)
+        for line in r.iter_lines():
+            if 'custom/player02-a.js' in line:
+                break
+        if 'custom/player02-a.js' in line:
+            pass
+        else:
+            print 'failed to find the js file, maybe this is a pre-2015 video?'
+
+        # outputs http://evt.dispeak.com/ubm/gdc/sf17/custom/player02-a.js
+        js = xmlURL.rsplit('player.html')[0] + 'custom/player02-a.js'
+
+        r = requests.get(js)
+        self.checkURLResponse(r)
+
+        for line in r.iter_lines():
+            if 'httpHostSource' in line:
+                break
+
+        # host should now be something like 'http://s3-2u-d.digitallyspeaking.com'
+        host = line.rsplit('=')[-1]
+        host = host[2:-2]
 
         # joins host and mp4 file
         urls = []
