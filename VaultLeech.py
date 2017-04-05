@@ -77,7 +77,9 @@ class VaultLeech(object):
         for line in r.iter_lines():
             if 'custom/player02-a.js' in line:
                 break
-        if 'custom/player02-a.js' in line:
+            if 'custom/player01.js' in line:
+                break
+        if 'custom/player02-a.js' or 'custom/player01.js' in line:
             pass
         else:
             print 'failed to find the js file, maybe this is a pre-2015 video?'
@@ -108,9 +110,10 @@ class VaultLeech(object):
     # show video details    
     def showDetails(self, xml, filelist):
         tree = etree.parse(xml)
+
         print '='*50
 
-        print 'GDC', self.getYear(xml)
+        print self.getEvent(xml), self.getYear(xml)
         for title in tree.xpath('/podiumPresentation/metadata/title'):
             print title.text
 
@@ -138,11 +141,21 @@ class VaultLeech(object):
 
         return None
 
+    # return if we're dealing with GDC or VRDC
+    def getEvent(self, string):
+
+        event = string.rsplit('/')[5]
+        event = event [:-2]
+
+        return event.upper()
+    
     # return the year of the event from the video url
     def getYear(self, string):
 
-        year = string[string.find('sf')+2:string.find('sf')+4]
-        if (int(year)+1000 > 1096):
+        year = string.rsplit('/')[5]
+        year = year [-2:]
+        
+        if (int(year) >= int(96)):
             stryear = 1900+int(year)
         else:
             stryear = 2000+int(year)
