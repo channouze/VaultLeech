@@ -3,7 +3,7 @@ import requests
 import sys
 from lxml import etree
 
-version = '0.0.1'
+version = '0.0.1c'
 
 class VaultLeech(object):
 
@@ -75,8 +75,10 @@ class VaultLeech(object):
         r = requests.get(xmlURL)
         self.checkURLResponse(r)
         for line in r.iter_lines():
+            # GDC from 2013 to 2017
             if 'custom/player02-a.js' in line:
                 break
+            # VRDC 2016-17
             if 'custom/player01.js' in line:
                 break
         if 'custom/player02-a.js' or 'custom/player01.js' in line:
@@ -98,7 +100,7 @@ class VaultLeech(object):
         host = line.rsplit('=')[-1]
         host = host[2:-2]
 
-        # joins host and mp4 file
+        # joins host and mp4 file and build the list of available videos
         urls = []
 
         for index in range (0,len(mp4list)):
@@ -113,7 +115,9 @@ class VaultLeech(object):
 
         print '='*50
 
+        # display event and year
         print self.getEvent(xml), self.getYear(xml)
+
         for title in tree.xpath('/podiumPresentation/metadata/title'):
             print title.text
 
@@ -147,6 +151,10 @@ class VaultLeech(object):
         event = string.rsplit('/')[5]
         event = event [:-2]
 
+        # sf means GDC, vrdc means, well, VRDC
+        if event == 'sf':
+            event = 'gdc'
+
         return event.upper()
     
     # return the year of the event from the video url
@@ -163,7 +171,7 @@ class VaultLeech(object):
 
     def checkURLResponse(self, req):
         if (req.status_code != 200):
-            print 'something went wrong'
+            sys.exit('something went wrong')
 
     def getVideo(self, link, year, name):
         
@@ -180,7 +188,7 @@ class VaultLeech(object):
         with open(file_name, "wb") as f:
             print "\nDownloading %s" % file_name
             # TODO: implement SSL verify the proper way
-            # TODO: headers and referer to a variable
+            # TODO: headers and referer to a variable, built from source url
             response = requests.get(link, stream=True, verify=False, headers={'Referer': 'http://evt.dispeak.com/ubm/gdc/sf17/player.html', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36'})
             total_length = response.headers.get('content-length')
 
