@@ -161,11 +161,21 @@ class VaultLeech(object):
             # print str(index)+':', filelist[index].rsplit('/')[-1], 'Bitrate: ', bitrate[index], 'Size: ', size[index]
             print str(index)+':', filelist[index].rsplit('/')[-1]
 
-        # TODO: Accept input from user
-        # TODO: Check input from user
+        while True:
+            try:
+                videoSelected = raw_input('\nChoose file:')
+            except ValueError:
+                print 'Enter a single-digit number'
+                continue
+            else:
+                # TODO: Support single videos
+                if videoSelected.lower() in ('0', '1', '2'):
+                    break
+                else:
+                    print 'Enter a single-digit number comprised between 0 and', len(filelist)-1
         
         # Finally, Get video
-        self.getVideo(filelist[0], self.getYear(xml), title.text)
+        self.getVideo(filelist[int(videoSelected)], self.getYear(xml), title.text)
 
         return None
 
