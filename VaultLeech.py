@@ -16,7 +16,8 @@ class VaultLeech(object):
         self.loginurl = ''
 
         # TODO: verify args
-        print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
+        # print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
+        print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url'
 
         self.buildPathToVideo()
 
@@ -31,6 +32,7 @@ class VaultLeech(object):
         pass
 
     def buildPathToVideo(self):
+
         r = requests.get(self.talkurl)
         self.checkURLResponse(r)
 
@@ -44,19 +46,20 @@ class VaultLeech(object):
         # outputs http://evt.dispeak.com/ubm/gdc/sf17/player.html?xml=847415_GXDS.xml
         start = line.find("http")
         end = line.find(".xml&") - len(line) + 4
-
         xmlURL = line [start:end]
 
         # outputs http://evt.dispeak.com/ubm/gdc/sf17/
-        baseURL = xmlURL[:xmlURL.find('player.html')]
-        
+        # baseURL = xmlURL[:xmlURL.find('player.html')]
+        baseURL = xmlURL[:xmlURL.find(self.getPlayername(xmlURL))]
+
         # outputs player.html?xml=847415_GXDS.xml
         xmlVideo = xmlURL.rsplit('/')[-1]
 
-        # outputs 847415_GXDS.xml
-        xmlVideo = xmlVideo[xmlVideo.find('xml=')+4:]
-        # xmlVideo = xmlVideo.split('=')
-
+        # if we're dealing with post-2013 html code we need additional parsing
+        if self.getYear(baseURL) > 2012:
+            xmlVideo = xmlVideo[xmlVideo.find('xml=')+4:]
+            # outputs 847415_GXDS.xml
+        
         # builds the final xml url
         # outputs http://evt.dispeak.com/ubm/gdc/sf17/xml/847415_GXDS.xml
         xmlRequest = baseURL + 'xml/' + xmlVideo
@@ -66,45 +69,66 @@ class VaultLeech(object):
         #           mp4:assets/ubm/gdc/sf17/847254_WTDP-v9f81f-800.mp4
         #           mp4:assets/ubm/gdc/sf17/847254_WTDP-v9f81f-1300.mp4
         tree = etree.parse(xmlRequest)
-        mp4list = []
-        for mp4 in tree.xpath('/podiumPresentation/metadata/MBRVideos/MBRVideo/streamName'):
-            mp4list.append(mp4.text)
         
-        # build host from js file in player.html
-        # TODO: make it work with pre 2015 videos
-        r = requests.get(xmlURL)
-        self.checkURLResponse(r)
-        for line in r.iter_lines():
-            # GDC from 2013 to 2017
-            if 'custom/player02-a.js' in line:
-                break
-            # VRDC 2016-17
-            if 'custom/player01.js' in line:
-                break
-        if 'custom/player02-a.js' or 'custom/player01.js' in line:
-            pass
+        # treat separately pre-2012 videos (flv)
+        videoList = []
+        if self.getYear(xmlRequest) > 2012:
+            # we have mp4s (yay!)
+            for mp4 in tree.xpath('/podiumPresentation/metadata/MBRVideos/MBRVideo/streamName'):
+                videoList.append(mp4.text)
         else:
-            print 'failed to find the js file, maybe this is a pre-2015 video?'
+            for flv in tree.xpath('/podiumPresentation/metadata/speakerVideo'):
+                # we have flvs (onoes!)
+                videoList.append(flv.text)
+        
+        # build host from js file in the right html player
+        r = requests.get(xmlURL)
+        
+        self.checkURLResponse(r)
+
+        # get the proper js filename depending on the year the event occured
+        # because it's different between 2014+, 2011-13, ...
+        js = self.getJavascriptFilename(self.getEvent(xmlRequest), self.getYear(xmlRequest))
+
+        for line in r.iter_lines():
+            if js in line:
+                break
+        if js not in line:
+            pass
+            # print 'failed to find the js file, fallback to xml...'
 
         # outputs http://evt.dispeak.com/ubm/gdc/sf17/custom/player02-a.js
-        js = xmlURL.rsplit('player.html')[0] + 'custom/player02-a.js'
+        # except for pre-2014 where we'll read straight from the xml
+        if self.getYear(xmlRequest) > 2014:
+            js = xmlURL.rsplit(self.getPlayername(xmlURL))[0] + js
 
-        r = requests.get(js)
-        self.checkURLResponse(r)
+            r = requests.get(js)
+            self.checkURLResponse(r)
 
-        for line in r.iter_lines():
-            if 'httpHostSource' in line:
-                break
+            for line in r.iter_lines():
+                if 'httpHostSource' in line:
+                    break
+            if 'httpHostSource' not in line:
+                sys.exit('failed to find the host, aborting...')
 
-        # host should now be something like 'http://s3-2u-d.digitallyspeaking.com'
-        host = line.rsplit('=')[-1]
-        host = host[2:-2]
+            host = line.rsplit('=')[-1]
+            host = host[2:-2]
+        else:
+            tree = etree.parse(xmlRequest)
 
-        # joins host and mp4 file and build the list of available videos
+            host = tree.xpath('/podiumPresentation/metadata/mp4video')
+            if host == '':
+                host = line.text.rsplit('/assets')[0]
+            else:            
+                host = 'http://s3-2u-d.digitallyspeaking.com'
+                # best guess when all else fail (e.g. paywall videos)
+                # TODO: find the host for 2012 videos and below
+
+        # joins host and mp4/flv file and build the list of available videos
         urls = []
 
-        for index in range (0,len(mp4list)):
-            urls.append(host + '/' + str(mp4list[index])[4:])
+        for index in range (0,len(videoList)):
+            urls.append(host + '/' + str(videoList[index])[4:])
         
         # display download details (if found)
         self.showDetails(xmlRequest, urls)
@@ -130,9 +154,9 @@ class VaultLeech(object):
         print '='*50
         # prints the files available and the bitrate information
         print 'Available files:\n'
-        # TODO: bitrate information
-        bitrate = [0,1,2]
-        size = [0,1,2]
+        # TODO: bitrate & size information
+        # bitrate = [0,1,2]
+        # size = [0,1,2]
         for index in range (0,len(filelist)):
             # print str(index)+':', filelist[index].rsplit('/')[-1], 'Bitrate: ', bitrate[index], 'Size: ', size[index]
             print str(index)+':', filelist[index].rsplit('/')[-1]
@@ -145,7 +169,29 @@ class VaultLeech(object):
 
         return None
 
-    # return if we're dealing with GDC or VRDC
+    # returns the right playerName.html
+    def getPlayername(self, url):
+        
+        if self.getYear(url) == 2016 and self.getEvent(url) == 'GDC':
+            return 'player2.html'
+        else:
+            return 'player.html'
+    
+    # returns the right .js file we need to find the host, depending on the event
+    def getJavascriptFilename(self, event, year):
+        if event == 'GDC':
+            if year == 2017:
+                return 'custom/player02-a.js'
+            if year == 2015 or year == 2016:
+                return 'custom/player2.js'
+            if year <= 2014:
+                return 'no js for pre-2014 (use xml instead!)'
+        else:
+            if event == 'VRDC':
+                return 'custom/player01.js'
+        return 'js not found'
+
+    # returns GDC or VRDC depending on the URL fed
     def getEvent(self, string):
 
         event = string.rsplit('/')[5]
@@ -160,13 +206,14 @@ class VaultLeech(object):
     # return the year of the event from the video url
     def getYear(self, string):
 
-        year = string.rsplit('/')[5]
+        year = string.rsplit('/')[5] # TODO: Make it work with the older urls pre-2011
         year = year [-2:]
         
         if (int(year) >= int(96)):
             stryear = 1900+int(year)
         else:
             stryear = 2000+int(year)
+
         return int(stryear)
 
     def checkURLResponse(self, req):
@@ -177,12 +224,6 @@ class VaultLeech(object):
         
         # TODO Beautify the file name
         
-#        file_name = 'GDC'+str(year)+' '+name+'.mp4'
-#
-#        print file_name
-#        for char in file_name:
-#            if char.isalnum() or char == ' ':
-
         file_name = link.rsplit('/')[-1]        
 
         with open(file_name, "wb") as f:
