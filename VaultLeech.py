@@ -161,18 +161,22 @@ class VaultLeech(object):
             # print str(index)+':', filelist[index].rsplit('/')[-1], 'Bitrate: ', bitrate[index], 'Size: ', size[index]
             print str(index)+':', filelist[index].rsplit('/')[-1]
 
-        while True:
-            try:
-                videoSelected = raw_input('\nChoose file:')
-            except ValueError:
-                print 'Enter a single-digit number'
-                continue
-            else:
-                # TODO: Support single videos
-                if videoSelected.lower() in ('0', '1', '2'):
-                    break
+        # Let the user decide which video she wants to download, or auto-dl if only one video available
+        if len(filelist) > 1:
+            while True:
+                try:
+                    videoSelected = raw_input('\nChoose file:')
+                except ValueError:
+                    print 'Enter a single-digit number'
+                    continue
                 else:
-                    print 'Enter a single-digit number comprised between 0 and', len(filelist)-1
+                    # TODO: Make this a little bit cleaner
+                    if videoSelected.lower() in ('0', '1', '2'):
+                        break
+                    else:
+                        print 'Enter a single-digit number comprised between 0 and', len(filelist)-1
+        else:
+            videoSelected = 0
         
         # Finally, Get video
         self.getVideo(filelist[int(videoSelected)], self.getYear(xml), title.text)
