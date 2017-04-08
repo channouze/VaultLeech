@@ -84,8 +84,8 @@ class VaultLeech(object):
         r = requests.get(talkurl)
         self.checkURLResponse(r)
 
-        with open('log_talk.txt', "wb") as mylogfile:
-            mylogfile.write(r.text)
+#        with open('log_talk.txt', "wb") as mylogfile:
+#            mylogfile.write(r.text)
 
         # find the mp4 xml definition file
         for line in r.iter_lines():
