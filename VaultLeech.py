@@ -2,38 +2,48 @@ import os
 import requests
 import sys
 from lxml import etree
+from validate_email import validate_email
 
-version = '0.0.1c'
+version = '0.0.1d'
+vaultLoginURL = 'http://gdcvault.com/api/login.php'
 
 class VaultLeech(object):
 
-    def __init__(self, talkurl, login, password):
-        """ Start up... """
-        self.login = login
-        self.password = password
-        self.talkurl = talkurl
-        
-        self.loginurl = ''
+    def __init__(self, talkurl, login = None, password = None):
+        # Start up...
+
+        print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
+        # print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url'
 
         # TODO: verify args
-        # print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
-        print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url'
+        # First: verify the URL so we don't abuse the login API
+        if self.validateTalkURL(talkurl):
+            if login is None and password is None:
+                # Means we handle a free video
+                self.buildPathToVideo(talkurl)
+            else:
+                if self.validateEmail(login):
+                    # Means we deal with authenticated stuff
+                    if self.loginToVault(login,password):
+                        self.buildPathToVideo(talkurl)
+                else:
+                    print 'e-mail is not valid, please try again.'
+                print 'url supplied is not a valid talk url, please try again'
 
-        self.buildPathToVideo()
-
-    def loginToVault(self):
-        r = requests.get(self.loginurl, auth=(self.login, self.password))
+    def loginToVault(self, login, password):
+        r = requests.get(vaultLoginURL, auth=(login, password))
         self.checkURLResponse(r)
+        return True
 
-    def validateEmail(self):
-        pass
+    def validateEmail(self, email):
+        return validate_email(str(email))
 
-    def validateTalkURL(self):
-        pass
+    def validateTalkURL(self, url):
+        return True
 
-    def buildPathToVideo(self):
+    def buildPathToVideo(self, talkurl):
 
-        r = requests.get(self.talkurl)
+        r = requests.get(talkurl)
         self.checkURLResponse(r)
 
         # find the mp4 xml definition file
@@ -122,7 +132,7 @@ class VaultLeech(object):
             else:            
                 host = 'http://s3-2u-d.digitallyspeaking.com'
                 # best guess when all else fail (e.g. paywall videos)
-                # TODO: find the host for 2012 videos and below
+                # TODO: find the host for 2012 videos and below edit: I'm afraid they're protected behind webserver permissions :(
 
         # joins host and mp4/flv file and build the list of available videos
         urls = []
@@ -161,11 +171,14 @@ class VaultLeech(object):
             # print str(index)+':', filelist[index].rsplit('/')[-1], 'Bitrate: ', bitrate[index], 'Size: ', size[index]
             print str(index)+':', filelist[index].rsplit('/')[-1]
 
+        if len(filelist) == 1 and filelist[len(filelist)-1].endswith('.flv'):
+            print '\nWARNING! Download is not supported at the moment for flv videos'
+        
         # Let the user decide which video she wants to download, or auto-dl if only one video available
         if len(filelist) > 1:
             while True:
                 try:
-                    videoSelected = raw_input('\nChoose file:')
+                    videoSelected = raw_input('\nChoose file: ')
                 except ValueError:
                     print 'Enter a single-digit number'
                     continue
@@ -208,11 +221,10 @@ class VaultLeech(object):
     # returns GDC or VRDC depending on the URL fed
     def getEvent(self, string):
 
-        event = string.rsplit('/')[5]
-        event = event [:-2]
+        event = self.getInformationFromURL(string) [:-2]
 
         # sf means GDC, vrdc means, well, VRDC
-        if event == 'sf':
+        if event == 'sf' or event == 'gdc20':
             event = 'gdc'
 
         return event.upper()
@@ -220,15 +232,31 @@ class VaultLeech(object):
     # return the year of the event from the video url
     def getYear(self, string):
 
-        year = string.rsplit('/')[5] # TODO: Make it work with the older urls pre-2011
-        year = year [-2:]
-        
+        year = self.getInformationFromURL(string) [-2:]
+
         if (int(year) >= int(96)):
             stryear = 1900+int(year)
         else:
             stryear = 2000+int(year)
 
         return int(stryear)
+
+    # returns the useful part of the URL where we can generate event name and year
+    def getInformationFromURL(self, string):
+        # branch depending on whether we've been supplied the .xml or the .html
+        if '?' in string:
+            # 1) split the url so we discard everything post player?.html
+            string = string.rsplit('player')[0]  
+            # 2) count the slashes and strip
+            string = string.rsplit('/')[string.count('/')-1]
+        else:
+            if string.endswith('.xml'):
+                # xml url, so go back 2 positions
+                string = string.rsplit('/')[string.count('/')-2]
+            else:
+                # canonical url, so go back 1 pos
+                string = string.rsplit('/')[string.count('/')-1]
+        return string
 
     def checkURLResponse(self, req):
         if (req.status_code != 200):
