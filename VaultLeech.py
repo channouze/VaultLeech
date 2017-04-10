@@ -6,9 +6,10 @@ import json
 from lxml import etree
 from validate_email import validate_email
 
-version = '0.0.1e'
+version = '0.0.1f'
 vaultLoginURL = 'http://gdcvault.com/api/login.php'
 vaultLogoutURL = 'http://gdcvault.com/logout'
+session = requests.Session()
 
 class VaultLeech(object):
 
@@ -28,7 +29,7 @@ class VaultLeech(object):
                     # Means we deal with authenticated stuff
                     if self.loginToVault(login,password):
                         self.buildPathToVideo(talkurl)
-                        self.logoutFromVault
+                        self.logoutFromVault()
                 else:
                     print 'ERROR: e-mail is not valid, please try again.'
         else:
@@ -40,7 +41,7 @@ class VaultLeech(object):
         self.checkURLResponse(r)
 
         for logoutData in r.iter_lines():
-            if 'Logout' in logoutData:
+            if '<li id="nav_logout" class="nav_item nav_link"><a href="/logout">Logout</a></li>' in logoutData:
                 # print "User already logged in"
                 self.logoutFromVault()
                 break
@@ -50,16 +51,16 @@ class VaultLeech(object):
         r = requests.post(vaultLoginURL, data=payload)
         self.checkURLResponse(r)
 
-        # our request gets us a JSON file so we can now check credentials
-        data = r.json()
+        # our request gets us a cookie which is parsable as a JSON file so we can now check credentials
+        cookie = r.json()
 
-        if data['is_bump']:
+        if cookie['is_bump']:
             print 'ERROR: You are already logged in with that account from another session or computer'
             exit(0)
 
-        if data["isSubscribed"]:
-            print 'Logged in as', data['first_name'], data['last_name'], 'from', data['company']
-            print 'This account subscription expires on', data['expiration'].rsplit()[0]
+        if cookie["isSubscribed"]:
+            print 'Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
+            print 'This account subscription expires on', cookie['expiration'].rsplit()[0]
 
 #        with open('log_auth.txt', "wb") as mylogfile:
 #            mylogfile.write(r.text)
@@ -185,11 +186,12 @@ class VaultLeech(object):
             urls.append(host + '/' + str(videoList[index])[4:])
         
         # display download details (if found)
-        self.showDetails(xmlRequest, urls)
+        videoDetails = self.showDetails(xmlRequest, urls)
 
-        self.logoutFromVault()
+        # Finally, Get video
+        self.getVideo(videoDetails[0], videoDetails[1], videoDetails[2], xmlURL)
     
-    # show video details    
+    # show and returns video details    
     def showDetails(self, xml, filelist):
         tree = etree.parse(xml)
 
@@ -223,7 +225,8 @@ class VaultLeech(object):
         for filesize in filelist:
             r = requests.head(filesize)
             headers = r.headers
-            size.append(int(headers.get('content-length'))//(1024*1024))
+            # size.append(int(headers.get('content-length'))//(1024*1024))
+            size.append(1024)
 
         for index in range (0,len(filelist)):
             # Displays the list of files along with bitrate and Size
@@ -248,11 +251,8 @@ class VaultLeech(object):
                         print 'Enter a single-digit number comprised between 0 and', len(filelist)-1
         else:
             videoSelected = 0
-        
-        # Finally, Get video
-        self.getVideo(filelist[int(videoSelected)], self.getYear(xml), title.text)
 
-        return None
+        return (filelist[int(videoSelected)], self.getYear(xml), title.text)
 
     # returns the right playerName.html
     def getPlayername(self, url):
@@ -321,7 +321,7 @@ class VaultLeech(object):
             print 'Error', req.status_code
             sys.exit('something went wrong')
 
-    def getVideo(self, link, year, name):
+    def getVideo(self, link, year, name, referer):
         
         # TODO Beautify the file name
         
@@ -347,4 +347,4 @@ class VaultLeech(object):
                     # TODO: Display adaptive download speed
                     sys.stdout.write("\r[%s%s] %s Kbps" % ('=' * done, ' ' * (50-done), (dl//(time.clock() - start)//1000)))    
                     sys.stdout.flush()
-            sys.stdout.write('\n\nWrote %s%s') % (os.getcwd(), file_name)
+            sys.stdout.write('\n\nWrote %s%s' % (os.getcwd(), file_name))
