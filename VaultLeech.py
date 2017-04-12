@@ -43,17 +43,17 @@ class VaultLeech(object):
              print 'ERROR: url supplied is not a valid talk url, please try again'
 
     def loginToVault(self, login, password):
-        # first make sure we're not already logged in
+        # First make sure we're not already logged in
         r = self.session.get('http://www.gdcvault.com/')
         self.checkURLResponse(r)
 
         for logoutData in r.iter_lines():
             if '<li id="nav_logout" class="nav_item nav_link"><a href="/logout">Logout</a></li>' in logoutData:
-                # print "User already logged in"
+                # User is already logged in
                 self.logoutFromVault()
                 break
 
-        # if not, log in using the user supplied credentials
+        # If not, log in using the user supplied credentials
         payload = {'email':login,'password':password}
         r = self.session.post(vaultLoginURL, data=payload)
         self.checkURLResponse(r)
@@ -61,13 +61,9 @@ class VaultLeech(object):
         # our request gets us a cookie which is parsable as a JSON file so we can now check credentials
         cookie = r.json()
 
-        if cookie['is_bump']:
-            print 'ERROR: You are already logged in with that account from another session or computer'
-            exit(0)
-
         if cookie["isSubscribed"]:
-            print 'Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
-            print 'This account subscription expires on', cookie['expiration'].rsplit()[0]
+            print '** Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
+            print '** This account subscription expires on', cookie['expiration'].rsplit()[0]
 
 #        with open('log_auth.txt', "wb") as mylogfile:
 #            mylogfile.write(r.text)
@@ -280,10 +276,16 @@ class VaultLeech(object):
     # returns the right playerName.html
     def getPlayername(self, url):
         
-        if self.getYear(url) == 2016 and self.getEvent(url) == 'GDC':
-            return 'player2.html'
+        # make sure we've got the full url and not the xml!
+        if '.html' in url:
+            # outputs http://evt.dispeak.com/ubm/gdc/sf17/player.html
+            playerName = url.split('?')[0]
+            # outputs player.html
+            playerName = playerName.rsplit('/')[-1]        
+            return playerName
         else:
-            return 'player.html'
+            print 'ERROR: malformed url'
+            return 'ERROR: malformed url'
     
     # returns the right .js file we need to find the host, depending on the event
     def getJavascriptFilename(self, event, year):
@@ -307,6 +309,9 @@ class VaultLeech(object):
         # sf means GDC, vrdc means, well, VRDC
         if event == 'sf' or event == 'gdc20':
             event = 'gdc'
+        # except for 2017 (that would have been too easy)
+        if self.getInformationFromURL(string)[:2] == '17' and getPlayername(string) == 'playerv.html':
+            event = 'vrdc'
 
         return event.upper()
     
