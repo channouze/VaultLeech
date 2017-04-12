@@ -9,27 +9,34 @@ from validate_email import validate_email
 version = '0.0.1f'
 vaultLoginURL = 'http://gdcvault.com/api/login.php'
 vaultLogoutURL = 'http://gdcvault.com/logout'
-session = requests.Session()
 
 class VaultLeech(object):
 
     def __init__(self, talkurl, login = None, password = None):
         # Start up...
+        # set-up a session so we could persist our cookies across requests
+        self.session = requests.Session()
+
+        self.main(talkurl, login, password)
+
+    def main(self, talkurl, login = None, password = None):
 
         print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
-        # print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url'
 
         # First: verify the URL so we don't abuse the login API
+        # Also: Don't log in if the video is in the free section
         if self.isTalkURLValid(talkurl):
-            if login is None and password is None:
+            if (login is None and password is None) or self.isTalkInTheFreeSection(talkurl):
                 # Means we handle a free video
                 self.buildPathToVideo(talkurl)
             else:
                 if self.isEmailValid(login):
-                    # Means we deal with authenticated stuff
                     if self.loginToVault(login,password):
+                        # Means we deal with authenticated stuff
                         self.buildPathToVideo(talkurl)
                         self.logoutFromVault()
+                    else:
+                        print 'ERROR: account is not a GDC Vault subscriber.'
                 else:
                     print 'ERROR: e-mail is not valid, please try again.'
         else:
@@ -37,7 +44,7 @@ class VaultLeech(object):
 
     def loginToVault(self, login, password):
         # first make sure we're not already logged in
-        r = requests.get('http://www.gdcvault.com/')
+        r = self.session.get('http://www.gdcvault.com/')
         self.checkURLResponse(r)
 
         for logoutData in r.iter_lines():
@@ -48,7 +55,7 @@ class VaultLeech(object):
 
         # if not, log in using the user supplied credentials
         payload = {'email':login,'password':password}
-        r = requests.post(vaultLoginURL, data=payload)
+        r = self.session.post(vaultLoginURL, data=payload)
         self.checkURLResponse(r)
 
         # our request gets us a cookie which is parsable as a JSON file so we can now check credentials
@@ -68,7 +75,7 @@ class VaultLeech(object):
         return True
 
     def logoutFromVault(self):
-        r = requests.get(vaultLogoutURL)
+        r = self.session.get(vaultLogoutURL)
         self.checkURLResponse(r)
 
     def isEmailValid(self, email):
@@ -80,14 +87,24 @@ class VaultLeech(object):
         else:
             return False
 
+    def isTalkInTheFreeSection(self, url):
+        r = self.session.get(url)
+        self.checkURLResponse(r)
+
+        # no iframe if we hit the paywall
+        for line in r.iter_lines():
+            if 'iframe' in line:
+                return True
+        return False
+
     def buildPathToVideo(self, talkurl):
 
-        r = requests.get(talkurl)
+        r = self.session.get(talkurl)
         self.checkURLResponse(r)
 
 #        with open('log_talk.txt', "wb") as mylogfile:
 #            mylogfile.write(r.text)
-
+        
         # find the mp4 xml definition file
         for line in r.iter_lines():
             if 'iframe' in line:
@@ -137,7 +154,7 @@ class VaultLeech(object):
                 videoList.append(flv.text)
         
         # build host from js file in the right html player
-        r = requests.get(xmlURL)
+        r = self.session.get(xmlURL)
         
         self.checkURLResponse(r)
 
@@ -157,7 +174,7 @@ class VaultLeech(object):
         if self.getYear(xmlRequest) > 2014:
             js = xmlURL.rsplit(self.getPlayername(xmlURL))[0] + js
 
-            r = requests.get(js)
+            r = self.session.get(js)
             self.checkURLResponse(r)
 
             for line in r.iter_lines():
@@ -189,7 +206,7 @@ class VaultLeech(object):
         videoDetails = self.showDetails(xmlRequest, urls)
 
         # Finally, Get video
-        self.getVideo(videoDetails[0], videoDetails[1], videoDetails[2], xmlURL)
+        self.getVideo(videoDetails[0], videoDetails[1], videoDetails[2], xmlURL, videoDetails[3])
     
     # show and returns video details    
     def showDetails(self, xml, filelist):
@@ -223,14 +240,20 @@ class VaultLeech(object):
         size = []
 
         for filesize in filelist:
-            r = requests.head(filesize)
+            r = self.session.head(filesize)
             headers = r.headers
-            # size.append(int(headers.get('content-length'))//(1024*1024))
-            size.append(1024)
+            try:
+                filelength = int(headers.get('content-length'))
+            except TypeError:
+                # CDN error, ignore and continue 
+                filelength = 0
+            size.append(filelength//(1024*1024))
 
         for index in range (0,len(filelist)):
             # Displays the list of files along with bitrate and Size
-            print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index], 'MB'
+            # if size = 0, it probably means the download is invalid
+            if size[index] != 0:
+                print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index], 'MB'
 
         if len(filelist) == 1 and filelist[len(filelist)-1].endswith('.flv'):
             print '\nWARNING! Download is not supported at the moment for flv videos'
@@ -252,7 +275,7 @@ class VaultLeech(object):
         else:
             videoSelected = 0
 
-        return (filelist[int(videoSelected)], self.getYear(xml), title.text)
+        return (filelist[int(videoSelected)], self.getYear(xml), title.text, size[int(videoSelected)])
 
     # returns the right playerName.html
     def getPlayername(self, url):
@@ -318,10 +341,10 @@ class VaultLeech(object):
 
     def checkURLResponse(self, req):
         if (req.status_code != 200):
-            print 'Error', req.status_code
+            print 'Error', req.status_code, req.content
             sys.exit('something went wrong')
 
-    def getVideo(self, link, year, name, referer):
+    def getVideo(self, link, year, name, referer, total_length):
         
         # TODO Beautify the file name
         
@@ -332,8 +355,7 @@ class VaultLeech(object):
             # TODO: implement SSL verify the proper way
             # TODO: headers and referer to a generated variable, built from source url
             start = time.clock()
-            response = requests.get(link, stream=True, verify=False, headers={'Referer': 'http://evt.dispeak.com/ubm/gdc/sf17/player.html', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36'})
-            total_length = response.headers.get('content-length')
+            response = self.session.get(link, stream=True, verify=False, headers={'Referer': 'http://evt.dispeak.com/ubm/gdc/sf17/player.html', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36'})
 
             if total_length is None: # no content length header
                 f.write(response.content)
@@ -347,4 +369,4 @@ class VaultLeech(object):
                     # TODO: Display adaptive download speed
                     sys.stdout.write("\r[%s%s] %s Kbps" % ('=' * done, ' ' * (50-done), (dl//(time.clock() - start)//1000)))    
                     sys.stdout.flush()
-            sys.stdout.write('\n\nWrote %s%s' % (os.getcwd(), file_name))
+            sys.stdout.write('\n\nWrote %s\%s' % (os.getcwd(), file_name))
