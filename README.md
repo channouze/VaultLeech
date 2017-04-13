@@ -1,7 +1,7 @@
 # VaultLeech
 Download Vault videos for offline use
 
-Currently supports all free videos from 2013 to 2017
+Currently supports all free and subscriber videos from 2013 to 2017
 
 Usage: VaultLeech url (e-mail) (password)
 
