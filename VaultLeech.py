@@ -291,10 +291,10 @@ class VaultLeech(object):
             # outputs player.html
             playerName = playerName.rsplit('/')[-1]        
             return playerName
-        
-        # TODO: tidy this up
-        print 'ERROR: malformed url'
-        return 'ERROR: malformed url'
+        else:
+            # TODO: tidy this up
+            print 'ERROR: malformed url'
+            return 'ERROR: malformed url'
     
     # returns the right .js file we need to find the host, depending on the event
     def getJavascriptFilename(self, event, year):
@@ -330,8 +330,9 @@ class VaultLeech(object):
         if event == 'online':
             event == 'gdc online'
         # VRDC @ GDC events
-        if self.getPlayername(string) == 'playerv.html':
-            event = 'vrdc'
+        # TODO: Fix this
+        # if self.getPlayername(string) == 'playerv.html':
+        #     event = 'vrdc'
 
         return event.upper()
     
