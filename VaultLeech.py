@@ -1,3 +1,12 @@
+# =======================================
+# GDC Vault Leecher 
+# 
+# Backup videos for offline use
+#
+# https://github.com/channouze/VaultLeech
+#
+# =======================================
+
 import os
 import requests
 import sys
@@ -6,7 +15,7 @@ import json
 from lxml import etree
 from validate_email import validate_email
 
-version = '0.0.1f'
+version = '1.0'
 vaultLoginURL = 'http://gdcvault.com/api/login.php'
 vaultLogoutURL = 'http://gdcvault.com/logout'
 
@@ -62,11 +71,9 @@ class VaultLeech(object):
         cookie = r.json()
 
         if cookie["isSubscribed"]:
+            # TODO: Hardening (when company is None)
             print '** Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
             print '** This account subscription expires on', cookie['expiration'].rsplit()[0]
-
-#        with open('log_auth.txt', "wb") as mylogfile:
-#            mylogfile.write(r.text)
 
         return True
 
@@ -87,7 +94,7 @@ class VaultLeech(object):
         r = self.session.get(url)
         self.checkURLResponse(r)
 
-        # no iframe if we hit the paywall
+        # no iframe tag if we hit the paywall (or if audio only talk)
         for line in r.iter_lines():
             if 'iframe' in line:
                 return True
@@ -98,16 +105,17 @@ class VaultLeech(object):
         r = self.session.get(talkurl)
         self.checkURLResponse(r)
 
-#        with open('log_talk.txt', "wb") as mylogfile:
-#            mylogfile.write(r.text)
-        
         # find the mp4 xml definition file
         for line in r.iter_lines():
             if 'iframe' in line:
-                break
-        if not 'iframe' in line:
-            print 'ERROR: Could not find requested talk. Make sure the URL is valid'
+                # Filter out the pdfs and audio only talks (php instead of html in iframe)
+                if '.html' in line:
+                    break
+        if not '.html' in line:
+            print 'ERROR: Talk supplied is not a video. Please check the URL.'
             exit (0)
+
+        
 
         # build the xml request url
         
@@ -190,7 +198,7 @@ class VaultLeech(object):
             else:            
                 host = 'http://s3-2u-d.digitallyspeaking.com'
                 # best guess when all else fail (e.g. paywall videos)
-                # TODO: find the host for 2012 videos and below edit: I'm afraid they're protected behind webserver permissions :(
+                # Host for 2012 videos and below is protected behind webserver permissions :(
 
         # joins host and mp4/flv file and build the list of available videos
         urls = []
@@ -204,7 +212,7 @@ class VaultLeech(object):
         # Finally, Get video
         self.getVideo(videoDetails[0], videoDetails[1], videoDetails[2], xmlURL, videoDetails[3])
     
-    # show and returns video details    
+    # shows and returns video details    
     def showDetails(self, xml, filelist):
         tree = etree.parse(xml)
 
@@ -263,7 +271,7 @@ class VaultLeech(object):
                     print 'Enter a single-digit number'
                     continue
                 else:
-                    # TODO: Make this a little bit cleaner
+                    # TODO: Make this a little bit cleaner and handle zero sized videos
                     if videoSelected.lower() in ('0', '1', '2'):
                         break
                     else:
@@ -283,22 +291,28 @@ class VaultLeech(object):
             # outputs player.html
             playerName = playerName.rsplit('/')[-1]        
             return playerName
-        else:
-            print 'ERROR: malformed url'
-            return 'ERROR: malformed url'
+        
+        # TODO: tidy this up
+        print 'ERROR: malformed url'
+        return 'ERROR: malformed url'
     
     # returns the right .js file we need to find the host, depending on the event
     def getJavascriptFilename(self, event, year):
-        if event == 'GDC':
-            if year == 2017:
+        if event == 'GDC' or event == 'GDC EUROPE':
+            if year == 2017 or (event == 'GDC EUROPE' and year == 2016):
                 return 'custom/player02-a.js'
             if year == 2015 or year == 2016:
                 return 'custom/player2.js'
-            if year <= 2014:
-                return 'no js for pre-2014 (use xml instead!)'
         else:
             if event == 'VRDC':
-                return 'custom/player01.js'
+                if year == 2017:
+                    return 'custom/player02-a.js'
+                if year == 2016:
+                    return 'custom/player01.js'
+        if year <= 2014:
+                return 'no js for pre-2014 (use xml instead!)'
+           
+        # TODO: cleaner implementation
         return 'js not found'
 
     # returns GDC or VRDC depending on the URL fed
@@ -309,8 +323,14 @@ class VaultLeech(object):
         # sf means GDC, vrdc means, well, VRDC
         if event == 'sf' or event == 'gdc20':
             event = 'gdc'
-        # except for 2017 (that would have been too easy)
-        if self.getInformationFromURL(string)[:2] == '17' and getPlayername(string) == 'playerv.html':
+        # eur means GDC Europe
+        if event == 'eur':
+            event = 'gdc europe'
+        # online means GDC Austin
+        if event == 'online':
+            event == 'gdc online'
+        # VRDC @ GDC events
+        if self.getPlayername(string) == 'playerv.html':
             event = 'vrdc'
 
         return event.upper()
@@ -366,12 +386,12 @@ class VaultLeech(object):
                 f.write(response.content)
             else:
                 dl = 0
-                total_length = int(total_length)
+                total_length = int(total_length)*(1024*1024)
                 for chunk in response.iter_content(chunk_size=4096):
                     dl += len(chunk)
                     f.write(chunk)
                     done = int(50 * dl / total_length)
-                    # TODO: Display adaptive download speed
+                    # TODO: Display adaptive download speed (MB if > 1000KBps, etc)
                     sys.stdout.write("\r[%s%s] %s Kbps" % ('=' * done, ' ' * (50-done), (dl//(time.clock() - start)//1000)))    
                     sys.stdout.flush()
-            sys.stdout.write('\n\nWrote %s\%s' % (os.getcwd(), file_name))
+            sys.stdout.write('\n\nWrote %s\%s\n' % (os.getcwd(), file_name))
