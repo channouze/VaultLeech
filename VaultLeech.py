@@ -103,7 +103,6 @@ class VaultLeech(object):
         for line in r.iter_lines():
             if 'iframe' in line:
                 return True
-        # TODO: support GDC China 2014 videos from here
         return False
 
     def buildPathToVideo(self, talkurl):
@@ -157,7 +156,7 @@ class VaultLeech(object):
                 videoList.append(mp4.text)
         else:
             for flv in tree.xpath('/podiumPresentation/metadata/speakerVideo'):
-                # we have flvs (onoes!) except for some of the 2012 videos (mp4)
+                # we have flvs (onoes!)
                 videoList.append(flv.text)
         
         # build host from js file in the right html player
@@ -188,7 +187,7 @@ class VaultLeech(object):
                 if 'httpHostSource' in line:
                     break
             if 'httpHostSource' not in line:
-                self.exit('ERROR','failed to find the host')
+                self.exit('ERROR','failed to find the host, aborting...')
 
             host = line.rsplit('=')[-1]
             host = host[2:-2]
@@ -202,7 +201,6 @@ class VaultLeech(object):
                 host = 'http://s3-2u-d.digitallyspeaking.com'
                 # best guess when all else fail (e.g. paywall videos)
                 # Host for 2012 videos and below is protected behind webserver permissions :(
-                # TODO: handle mediaProxy.php as the file download redirector (pre-2013)
 
         # joins host and mp4/flv file and build the list of available videos
         urls = []
@@ -214,7 +212,7 @@ class VaultLeech(object):
         videoDetails = self.showDetails(xmlRequest, urls)
 
         # Finally, Get video
-        self.getVideo(videoDetails[0], self.getEvent(xmlURL), self.getYear(xmlURL), videoDetails[1], xmlURL, videoDetails[2])
+        self.getVideo(videoDetails[0], videoDetails[1], videoDetails[2], xmlURL, videoDetails[3])
     
     # shows and returns video details    
     def showDetails(self, xml, filelist):
@@ -241,20 +239,21 @@ class VaultLeech(object):
         bitrate = []
         for xmlbitrate in tree.xpath('/podiumPresentation/metadata/MBRVideos/MBRVideo/bitrate'):
             bitrate.append(xmlbitrate.text)
-        # If we don't have the data, set it to zero (malformed xml)
-        if len(bitrate) == 0:
-            bitrate.append(0)
+        # TODO: handle the flv NULL size & bitrate
+        if len(bitrate) == 1:
+            pass
 
         size = []
+
         for filesize in filelist:
             r = self.session.head(filesize)
             headers = r.headers
             try:
                 filelength = int(headers.get('content-length'))
             except TypeError:
-                # CDN error or flv protected file, ignore and continue 
+                # CDN error, ignore and continue 
                 filelength = 0
-            size.append(filelength)
+            size.append(filelength//(1024*1024))
 
         filelistLength = len(filelist)
         index = 0
@@ -270,7 +269,7 @@ class VaultLeech(object):
 
         for index in range (0,filelistLength):
             # Displays the list of files along with bitrate and size
-            print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index]//(1024*1024), 'MB'
+            print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index], 'MB'
 
         # Let the user decide which video she wants to download, or auto-dl if only one video available
         if filelistLength > 1:
@@ -294,7 +293,7 @@ class VaultLeech(object):
 
         if self.getYear(xml) > 2012:
             # Allow download for mp4 videos (2013 and up)
-            return (filelist[int(videoSelected)], title.text, size[int(videoSelected)])
+            return (filelist[int(videoSelected)], self.getYear(xml), title.text, size[int(videoSelected)])
         else:
             self.exit('ERROR', 'Download is not supported for flv videos')
 
@@ -398,15 +397,16 @@ class VaultLeech(object):
         raw_input('Press ENTER to continue')
         exit(0)
 
-    def getVideo(self, link, event, year, name, referer, total_length):
+    def getVideo(self, link, year, name, referer, total_length):
         
         # TODO: Beautify the file name
-        name = name.translate(None, '\"\\<>*?.!/;:')
-        fileName = event + str(year) + ' ' + name + link[-4:]
+        
+        file_name = link.rsplit('/')[-1]        
 
-        with open(fileName, "wb") as f:
-            print "\nDownloading %s" % fileName
+        with open(file_name, "wb") as f:
+            print "\nDownloading %s" % file_name
             # TODO: implement SSL verify the proper way
+            # TODO: user-agent to a generated variable, built from source url
             start = time.clock()
             response = self.session.get(link, stream=True, verify=False, headers={'Referer': referer, 'User-Agent': useragent})
 
@@ -414,7 +414,7 @@ class VaultLeech(object):
                 f.write(response.content)
             else:
                 dl = 0
-                total_length = int(total_length)
+                total_length = int(total_length)*(1024*1024)
                 for chunk in response.iter_content(chunk_size=4096):
                     dl += len(chunk)
                     f.write(chunk)
@@ -422,4 +422,4 @@ class VaultLeech(object):
                     # TODO: Display adaptive download speed (MB if > 1000KBps, etc)
                     sys.stdout.write("\r[%s%s] %s Kbps" % ('=' * done, ' ' * (50-done), (dl//(time.clock() - start)//1000)))    
                     sys.stdout.flush()
-            sys.stdout.write('\n\nWrote %s\%s\n' % (os.getcwd(), fileName))
+            sys.stdout.write('\n\nWrote %s\%s\n' % (os.getcwd(), file_name))
