@@ -71,9 +71,13 @@ class VaultLeech(object):
         # our request gets us a cookie which is parsable as a JSON file so we can now check credentials
         cookie = r.json()
 
+        company = cookie['company']
+
         if cookie["isSubscribed"]:
-            # TODO: Hardening (when company is None)
-            print '\n** Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
+            # If company is empty, put 'N/A' instead
+            if not cookie['company'].strip():
+                company = 'N/A'
+            print '\n** Logged in as', cookie['first_name'], cookie['last_name'], 'from company', company
             print '** This account subscription expires on', cookie['expiration'].rsplit()[0]
 
         return True
@@ -267,8 +271,6 @@ class VaultLeech(object):
             # Displays the list of files along with bitrate and size
             print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index], 'MB'
 
-        # if filelist[len(filelist)-1].endswith('.flv'):
-        
         # Let the user decide which video she wants to download, or auto-dl if only one video available
         if filelistLength > 1:
             while True:
@@ -385,10 +387,12 @@ class VaultLeech(object):
     def checkURLResponse(self, req):
         if (req.status_code != 200):
             # print 'Error', req.status_code, req.content
-            self.exit('ERROR', req.status_code + req.content)
+            self.exit('ERROR', str(req.status_code) + ' ' + req.content)
     
     def exit(self, errorType = 'UNKNOWN', string = 'No error message provided'):
         print errorType, ' ', string
+        # logout so we don't deal with concurrent users next time
+        self.logoutFromVault()
         # TODO: Harden that shit yo
         raw_input('Press ENTER to continue')
         exit(0)
