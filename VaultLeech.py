@@ -46,11 +46,11 @@ class VaultLeech(object):
                         self.buildPathToVideo(talkurl)
                         self.logoutFromVault()
                     else:
-                        print 'ERROR: account is not a GDC Vault subscriber.'
+                        self.exit('ERROR', 'account is not a GDC Vault subscriber.')
                 else:
-                    print 'ERROR: e-mail is not valid, please try again.'
+                    self.exit('ERROR','e-mail is not valid, please try again.')
         else:
-             print 'ERROR: url supplied is not a valid talk url, please try again'
+             self.exit('ERROR','url supplied is not a valid talk url, please try again')
 
     def loginToVault(self, login, password):
         # First make sure we're not already logged in
@@ -113,10 +113,7 @@ class VaultLeech(object):
                 if '.html' in line:
                     break
         if not '.html' in line:
-            print 'ERROR: Talk supplied is not a video. Please check the URL.'
-            exit (0)
-
-        
+            self.exit('ERROR', 'Talk supplied is not a video. Please check the URL.')
 
         # build the xml request url
         
@@ -186,7 +183,7 @@ class VaultLeech(object):
                 if 'httpHostSource' in line:
                     break
             if 'httpHostSource' not in line:
-                sys.exit('ERROR: failed to find the host, aborting...')
+                self.exit('ERROR','failed to find the host, aborting...')
 
             host = line.rsplit('=')[-1]
             host = host[2:-2]
@@ -254,33 +251,49 @@ class VaultLeech(object):
                 filelength = 0
             size.append(filelength//(1024*1024))
 
-        for index in range (0,len(filelist)):
-            # Displays the list of files along with bitrate and Size
-            # if size = 0, it probably means the download is invalid
-            if size[index] != 0:
-                print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index], 'MB'
+        filelistLength = len(filelist)
+        index = 0
 
-        if len(filelist) == 1 and filelist[len(filelist)-1].endswith('.flv'):
-            print '\nWARNING! Download is not supported at the moment for flv videos'
+        while index < filelistLength:
+            # if size = 0, it probably means the download is invalid, so remove at index
+            if size[index] == 0:
+                del size[index]
+                del bitrate[index]
+                del filelist[index]
+                filelistLength -= 1
+            index += 1
+
+        for index in range (0,filelistLength):
+            # Displays the list of files along with bitrate and size
+            print str(index)+':', filelist[index].rsplit('/')[-1], bitrate[index], 'kbps  Size: ', size[index], 'MB'
+
+        # if filelist[len(filelist)-1].endswith('.flv'):
         
         # Let the user decide which video she wants to download, or auto-dl if only one video available
-        if len(filelist) > 1:
+        if filelistLength > 1:
             while True:
                 try:
                     videoSelected = raw_input('\nChoose file: ')
                 except ValueError:
-                    print 'Enter a single-digit number'
                     continue
                 else:
                     # TODO: Make this a little bit cleaner and handle zero sized videos
-                    if videoSelected.lower() in ('0', '1', '2'):
+                    index = 0
+                    while index < filelistLength:
+                        if videoSelected.lower() == str(index):
+                            break
+                        index += 1
+                    if (videoSelected.lower() == str(index)) and (index != filelistLength):
                         break
-                    else:
-                        print 'Enter a single-digit number comprised between 0 and', len(filelist)-1
+                    print 'Enter a single-digit number comprised between 0 and', filelistLength-1
         else:
             videoSelected = 0
 
-        return (filelist[int(videoSelected)], self.getYear(xml), title.text, size[int(videoSelected)])
+        if self.getYear(xml) > 2012:
+            # Allow download for mp4 videos (2013 and up)
+            return (filelist[int(videoSelected)], self.getYear(xml), title.text, size[int(videoSelected)])
+        else:
+            self.exit('ERROR', 'Download is not supported for flv videos')
 
     # returns the right playerName.html
     def getPlayername(self, url):
@@ -330,6 +343,9 @@ class VaultLeech(object):
         # online means GDC Austin
         if event == 'online':
             event == 'gdc online'
+        # GDC Next
+        if event == 'gdcnext20':
+            event == 'gdc next'
         # VRDC @ GDC events
         # TODO: Fix this
         # if self.getPlayername(string) == 'playerv.html':
@@ -368,12 +384,18 @@ class VaultLeech(object):
 
     def checkURLResponse(self, req):
         if (req.status_code != 200):
-            print 'Error', req.status_code, req.content
-            sys.exit('something went wrong')
+            # print 'Error', req.status_code, req.content
+            self.exit('ERROR', req.status_code + req.content)
+    
+    def exit(self, errorType = 'UNKNOWN', string = 'No error message provided'):
+        print errorType, ' ', string
+        # TODO: Harden that shit yo
+        raw_input('Press ENTER to continue')
+        exit(0)
 
     def getVideo(self, link, year, name, referer, total_length):
         
-        # TODO Beautify the file name
+        # TODO: Beautify the file name
         
         file_name = link.rsplit('/')[-1]        
 
