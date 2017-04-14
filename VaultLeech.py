@@ -15,9 +15,10 @@ import json
 from lxml import etree
 from validate_email import validate_email
 
-version = '1.0'
+version = '1.1'
 vaultLoginURL = 'http://gdcvault.com/api/login.php'
 vaultLogoutURL = 'http://gdcvault.com/logout'
+useragent = 'VaultLeech/1.x (Python 2.7) https://github.com/channouze/VaultLeech'
 
 class VaultLeech(object):
 
@@ -30,7 +31,7 @@ class VaultLeech(object):
 
     def main(self, talkurl, login = None, password = None):
 
-        print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (user) (pass)'
+        print 'VaultLeech v' + version + '\nA GDC Vault Backup Tool\nUsage: VaultLeech url (e-mail) (password)'
 
         # First: verify the URL so we don't abuse the login API
         # Also: Don't log in if the video is in the free section
@@ -72,7 +73,7 @@ class VaultLeech(object):
 
         if cookie["isSubscribed"]:
             # TODO: Hardening (when company is None)
-            print '** Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
+            print '\n** Logged in as', cookie['first_name'], cookie['last_name'], 'from', cookie['company']
             print '** This account subscription expires on', cookie['expiration'].rsplit()[0]
 
         return True
@@ -379,9 +380,9 @@ class VaultLeech(object):
         with open(file_name, "wb") as f:
             print "\nDownloading %s" % file_name
             # TODO: implement SSL verify the proper way
-            # TODO: headers and referer to a generated variable, built from source url
+            # TODO: user-agent to a generated variable, built from source url
             start = time.clock()
-            response = self.session.get(link, stream=True, verify=False, headers={'Referer': 'http://evt.dispeak.com/ubm/gdc/sf17/player.html', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36'})
+            response = self.session.get(link, stream=True, verify=False, headers={'Referer': referer, 'User-Agent': useragent})
 
             if total_length is None: # no content length header
                 f.write(response.content)
