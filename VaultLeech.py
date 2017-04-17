@@ -25,6 +25,8 @@ class VaultLeech(object):
     def __init__(self, talkurl, login = None, password = None):
         # Start up...
         self.playerName = None
+        self.event = None
+        self.year = None
         # set-up a session so we could persist our cookies across requests
         self.session = requests.Session()
 
@@ -173,33 +175,40 @@ class VaultLeech(object):
         for line in r.iter_lines():
             if js in line:
                 break
-        if js not in line:
-            pass
-            # print 'failed to find the js file, fallback to xml...'
 
         # outputs http://evt.dispeak.com/ubm/gdc/sf17/custom/player02-a.js
         # except for pre-2014 where we'll read straight from the xml
         if self.getYear(xmlRequest) > 2014:
             js = xmlURL.rsplit(self.getPlayername(xmlURL))[0] + js
 
-            r = self.session.get(js)
-            self.checkURLResponse(r)
+            if js.endswith('.js'):
+                r = self.session.get(js)
+                self.checkURLResponse(r)
+            
+                for line in r.iter_lines():
+                    if 'httpHostSource' in line:
+                        break
+                if 'httpHostSource' not in line:
+                    self.exit('ERROR','failed to find the host')
 
-            for line in r.iter_lines():
-                if 'httpHostSource' in line:
-                    break
-            if 'httpHostSource' not in line:
-                self.exit('ERROR','failed to find the host')
-
-            host = line.rsplit('=')[-1]
-            host = host[2:-2]
+                host = line.rsplit('=')[-1]
+                host = host[2:-2]
         else:
             tree = etree.parse(xmlRequest)
 
-            host = tree.xpath('/podiumPresentation/metadata/mp4video')
-            if host == '':
-                host = line.text.rsplit('/assets')[0]
-            else:            
+            # list of lists
+            hosts = []
+            host = None
+
+            hosts.append(tree.xpath('/podiumPresentation/metadata/mp4video'))
+            hosts.append(tree.xpath('/podiumPresentation/metadata/smallResolutionVideo'))
+
+            for xmlElement in hosts:
+                # if host string is not empty
+                if xmlElement:
+                    host = xmlElement[0].text.rsplit('/assets/')[0]
+                    break
+            if not host:
                 host = 'http://s3-2u-d.digitallyspeaking.com'
                 # best guess when all else fail (e.g. paywall videos)
                 # Host for 2012 videos and below is protected behind webserver permissions :(
@@ -343,37 +352,39 @@ class VaultLeech(object):
     # returns GDC or VRDC depending on the URL fed
     def getEvent(self, string):
 
-        event = self.getInformationFromURL(string) [:-2]
+        if self.event is None:
+            self.event = self.getInformationFromURL(string) [:-2]
 
-        # sf means GDC, vrdc means, well, VRDC
-        if event == 'sf' or event == 'gdc20':
-            event = 'gdc'
-        # eur means GDC Europe
-        if event == 'eur':
-            event = 'gdc europe'
-        # online means GDC Austin
-        if event == 'online':
-            event == 'gdc online'
-        # GDC Next
-        if event == 'gdcnext20':
-            event == 'gdc next'
-        # VRDC @ GDC events
-        if self.getPlayername(string) == 'playerv.html':
-            event = 'vrdc'
+            # sf means GDC, vrdc means, well, VRDC
+            if self.event == 'sf' or self.event == 'gdc20':
+                self.event = 'gdc'
+            # eur means GDC Europe
+            if self.event == 'eur':
+                self.event = 'gdc europe'
+            # online means GDC Austin
+            if self.event == 'online':
+                self.event == 'gdc online'
+            # GDC Next
+            if self.event == 'gdcnext20':
+                self.event == 'gdc next'
+            # VRDC @ GDC events
+            if self.getPlayername(string) == 'playerv.html':
+                self.event = 'vrdc'
 
-        return event.upper()
+        return self.event.upper()
     
     # returns the year of the event from the video url
     def getYear(self, string):
 
-        year = self.getInformationFromURL(string) [-2:]
+        if self.year is None:
+            self.year = int(self.getInformationFromURL(string) [-2:])
 
-        if (int(year) >= int(96)):
-            stryear = 1900+int(year)
-        else:
-            stryear = 2000+int(year)
+            if self.year >= 96:
+                self.year = 1900+self.year
+            else:
+                self.year = 2000+self.year
 
-        return int(stryear)
+        return self.year
 
     # returns the useful part of the URL where we can generate event name and year
     def getInformationFromURL(self, string):
