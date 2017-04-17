@@ -24,6 +24,7 @@ class VaultLeech(object):
 
     def __init__(self, talkurl, login = None, password = None):
         # Start up...
+        self.playerName = None
         # set-up a session so we could persist our cookies across requests
         self.session = requests.Session()
 
@@ -301,17 +302,24 @@ class VaultLeech(object):
     # returns the right playerName.html
     def getPlayername(self, url):
         
-        # make sure we've got the full url and not the xml!
-        if '.html' in url:
-            # outputs http://evt.dispeak.com/ubm/gdc/sf17/player.html
-            playerName = url.split('?')[0]
-            # outputs player.html
-            playerName = playerName.rsplit('/')[-1]        
-            return playerName
+        # First run: set self.playerName so we won't have to do any more parsing later.
+        if self.playerName is None:
+            # make sure we've got the full url and not the xml!
+            if '.html' in url:
+                # outputs http://evt.dispeak.com/ubm/gdc/sf17/player.html
+                self.playerName = url.split('?')[0]
+                # outputs player.html
+                self.playerName = self.playerName.rsplit('/')[-1]        
+                return self.playerName
+            else:
+                if url.endswith('.xml') and '?' not in url:
+                    print 'ERROR: unable to find playername from an xml url!'
+                    return None
+                else:
+                    self.exit('ERROR', 'malformed url')
         else:
-            # TODO: tidy this up
-            print 'ERROR: malformed url'
-            return 'ERROR: malformed url'
+            return self.playerName
+
     
     # returns the right .js file we need to find the host, depending on the event
     def getJavascriptFilename(self, event, year):
@@ -350,9 +358,8 @@ class VaultLeech(object):
         if event == 'gdcnext20':
             event == 'gdc next'
         # VRDC @ GDC events
-        # TODO: Fix this
-        # if self.getPlayername(string) == 'playerv.html':
-        #     event = 'vrdc'
+        if self.getPlayername(string) == 'playerv.html':
+            event = 'vrdc'
 
         return event.upper()
     
