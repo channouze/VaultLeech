@@ -13,9 +13,10 @@ import sys
 import time
 import json
 from lxml import etree
+from urllib2 import urlopen
 from validate_email import validate_email
 
-version = '1.1'
+version = '1.2.1'
 vaultLoginURL = 'http://gdcvault.com/api/login.php'
 vaultLogoutURL = 'http://gdcvault.com/logout'
 useragent = 'VaultLeech/1.x (Python 2.7) https://github.com/channouze/VaultLeech'
@@ -150,7 +151,9 @@ class VaultLeech(object):
         # outputs   mp4:assets/ubm/gdc/sf17/847254_WTDP-v9f81f-500.mp4
         #           mp4:assets/ubm/gdc/sf17/847254_WTDP-v9f81f-800.mp4
         #           mp4:assets/ubm/gdc/sf17/847254_WTDP-v9f81f-1300.mp4
-        tree = etree.parse(xmlRequest)
+
+        # SSL
+        tree = etree.parse(urlopen(xmlRequest))
         
         # treat separately pre-2012 videos (flv)
         videoList = []
@@ -194,7 +197,7 @@ class VaultLeech(object):
                 host = line.rsplit('=')[-1]
                 host = host[2:-2]
         else:
-            tree = etree.parse(xmlRequest)
+            tree = etree.parse(urlopen(xmlRequest))
 
             # list of lists
             hosts = []
@@ -228,7 +231,7 @@ class VaultLeech(object):
     
     # shows and returns video details    
     def showDetails(self, xml, filelist):
-        tree = etree.parse(xml)
+        tree = etree.parse(urlopen(xml))
 
         print '='*50
 
